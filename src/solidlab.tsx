@@ -786,7 +786,7 @@ export function SolidLab() {
     { path: string; type: 'file' | 'directory' } | undefined
   >(undefined)
   const [actionMode, setActionMode] = createSignal<'explorer' | 'search'>('explorer')
-  
+
   const [search, setSearch] = createStore({
     searchQuery: '',
     replaceQuery: '',
