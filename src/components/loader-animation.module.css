@@ -33,7 +33,6 @@ body {
   --color-background-hover: #e7ecf093;
   --color-scroll-bar: #e1e6ed;
   --color-handle: #c6cdd6;
-  --color-selection: #d1daed;
   --vscode-foreground: var(--color-foreground);
 }
 
@@ -49,11 +48,10 @@ body[data-color-mode='dark'] {
   --color-background-hover: #d9dcdf31;
   --color-scroll-bar: #293a5d;
   --color-handle: #466299;
-  --color-selection: #67a1df95;
 }
 
 [data-color-mode='dark'] ::selection {
-  background-color: var(--color-background-hover);
+  background: var(--color-background-hover);
 }
 
 .solidlab {
@@ -70,14 +68,6 @@ body[data-color-mode='dark'] {
 
     &:hover,
     &.active {
-      color: var(--color-foreground);
-    }
-
-    &:focus-visible {
-      opacity: 1;
-      outline: none;
-      border: 1px solid var(--color-foreground);
-      background-color: var(--color-background-hover);
       color: var(--color-foreground);
     }
   }
@@ -102,7 +92,7 @@ a {
 }
 
 iframe {
-  background-color: white;
+  background: white;
 }
 
 .sideBar {
@@ -124,13 +114,7 @@ iframe {
       aspect-ratio: 1 / 1;
 
       &:hover {
-        background-color: var(--color-background-hover);
-      }
-      &:focus-visible {
-        outline: none;
-        border: 1px solid var(--color-foreground);
-        background-color: var(--color-background-hover);
-        color: var(--color-foreground);
+        background: var(--color-background-hover);
       }
     }
   }
@@ -162,18 +146,13 @@ iframe {
 }
 
 .explorerContents {
-  content-visibility: auto;
   display: grid;
   flex: 1;
   align-content: baseline;
   overflow: auto;
   color: var(--color-foreground);
   font-size: 10pt;
-  line-height: 18pt;
-
-  & > * {
-    content-visibility: auto;
-  }
+  line-height: 16pt;
 
   & .explorerInput {
     margin: -1px;
@@ -184,7 +163,7 @@ iframe {
       flex: 1;
       outline: none;
       border: none;
-      background-color: transparent;
+      background: transparent;
 
       min-width: 0px;
     }
@@ -211,7 +190,7 @@ iframe {
       left: 0px;
       opacity: 0;
       transition: opacity 0.125s;
-      background-color: var(--color-foreground);
+      background: var(--color-foreground);
       width: 3px;
       height: 100%;
       content: '';
@@ -220,7 +199,7 @@ iframe {
     &:focus-visible {
       outline: none;
       border: none;
-      background-color: var(--color-background-hover);
+      background: var(--color-background-hover);
 
       &::before {
         opacity: 1;
@@ -256,32 +235,12 @@ iframe {
 
 .tab {
   display: flex;
-  position: relative;
   gap: 5px;
   border-right: 2px solid var(--border-color);
   padding-left: var(--margin);
 
-  &:has(.focusTabButton:focus-visible) {
-    background-color: var(--color-background-hover);
-
-    &::before {
-      position: absolute;
-      top: 0px;
-      right: 0px;
-      bottom: 0px;
-      left: 0px;
-      border: 1px solid var(--color-foreground);
-      content: '';
-    }
-  }
-
-  & .focusTabButton {
+  & button:first-child {
     padding: 0px;
-
-    &:focus-visible {
-      border: none;
-      background-color: transparent;
-    }
   }
 
   &.active {
@@ -299,7 +258,6 @@ iframe {
 
   & .closeTabButton {
     opacity: 0;
-    border: 1px solid transparent;
     padding-right: var(--margin);
     padding-left: var(--margin);
 
@@ -402,7 +360,7 @@ iframe {
     outline: none;
     border: 1px solid var(--color-foreground-inactive);
     border-radius: 3px;
-    background-color: transparent;
+    background: transparent;
     padding-left: 5px;
     color: var(--color-foreground);
   }
@@ -471,7 +429,7 @@ iframe {
 .contextMenuSeparator {
   margin: 6px;
   border: none;
-  background-color: var(--color-foreground-inactive);
+  background: var(--color-foreground-inactive);
   height: 1px;
 }
 
@@ -585,7 +543,7 @@ iframe {
   gap: var(--margin);
 }
 .dialogSeparator {
-  background-color: var(--color-foreground-inactive);
+  background: var(--color-foreground-inactive);
 }
 .dialogDescription {
   font-size: 16px;
@@ -648,7 +606,7 @@ iframe {
     }
     & .dialogOptionIcon[aria-haspopup]:hover,
     & .dialogOptionIcon[aria-expanded='true'] {
-      background-color: var(--color-accent);
+      background: var(--color-accent);
     }
   }
 }

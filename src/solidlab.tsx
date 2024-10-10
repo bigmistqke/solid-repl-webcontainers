@@ -24,18 +24,17 @@ import {
   Show,
   useContext,
 } from 'solid-js'
+import { createStore, SetStoreFunction } from 'solid-js/store'
 import { Codicon } from './components/codicon/codicon'
 import { CodiconButton } from './components/codicon/codicon-button'
+import { LoaderAnimation } from './components/loader-animation'
 import { Monaco } from './components/monaco'
+import { SearchAndReplace } from './components/search-and-replace'
 import styles from './solidlab.module.css'
 import { every, whenEffect } from './utils/conditionals'
 import { createFileSystemTree } from './utils/create-file-system-tree'
 import { createWritable } from './utils/create-writable'
-
-function getNameFromPath(path: string) {
-  const segments = path.split('/')
-  return segments[segments.length - 1]
-}
+import { getNameFromPath } from './utils/get-name-from-path'
 
 export const files = createFileSystemTree(
   await Promise.all(
@@ -44,16 +43,6 @@ export const files = createFileSystemTree(
     ),
   ),
 )
-
-/**********************************************************************************/
-/*                                                                                */
-/*                                Loader Animation                                */
-/*                                                                                */
-/**********************************************************************************/
-
-function LoaderAnimation() {
-  return <Codicon kind="loading" class={styles.loaderAnimation} />
-}
 
 /**********************************************************************************/
 /*                                                                                */
@@ -167,10 +156,10 @@ export function ManagerModal() {
                           executing operating system commands directly within your browser tab.
                           <br />
                           <br />
-                          If WebContainers is disabled SolidLab falls back to the client-only{' '}
+                          If WebContainers is disabled SolidLab falls back to{' '}
                           <a href="https://github.com/bigmistqke/repl">@bigmistqke/repl</a>. This
-                          runtime is not suited for handling SolidStart applications, but can be
-                          useful for quick prototyping of client-side code.
+                          package is not suited for SolidStart applications, but can be useful for
+                          quick prototyping of client-side code.
                         </Popover.Description>
                       </Popover.Content>
                     </Popover.Portal>
@@ -192,31 +181,26 @@ export function ManagerModal() {
 /*                                                                                */
 /**********************************************************************************/
 
-const terminal = new TerminalInstance({
-  convertEol: true,
-  fontSize: 10,
-  lineHeight: 1,
-})
-const fitAddon = new FitAddon()
-terminal.loadAddon(new WebLinksAddon())
-terminal.loadAddon(fitAddon)
-
 function Terminal() {
-  const repl = useSolidLab()
+  const solidlab = useSolidLab()
 
-  whenEffect(repl.container, async container => {
+  const fitAddon = new FitAddon()
+  solidlab.terminal.loadAddon(new WebLinksAddon())
+  solidlab.terminal.loadAddon(fitAddon)
+
+  whenEffect(solidlab.webContainer, async container => {
     const shellProcess = await container.spawn('jsh')
     const shellInput = shellProcess.input.getWriter()
 
     shellProcess.output.pipeTo(
       new WritableStream({
         write(data) {
-          terminal.write(data)
+          solidlab.terminal.write(data)
         },
       }),
     )
 
-    terminal.onData(data => {
+    solidlab.terminal.onData(data => {
       shellInput.write(data)
     })
   })
@@ -227,7 +211,7 @@ function Terminal() {
       class={styles.terminal}
       ref={element => {
         onMount(() => {
-          terminal.open(element)
+          solidlab.terminal.open(element)
           new ResizeObserver(() => fitAddon.fit()).observe(element)
         })
       }}
@@ -242,22 +226,22 @@ function Terminal() {
 /**********************************************************************************/
 
 function Tabs() {
-  const repl = useSolidLab()
+  const solidlab = useSolidLab()
 
   function Tab(props: { path: string }) {
-    const isFocused = () => repl.activeTab() === props.path
+    const isFocused = () => solidlab.activeTab() === props.path
     return (
       <span
         class={clsx(styles.tab, isFocused() && styles.active)}
         ref={element => whenEffect(isFocused, () => element.scrollIntoView())}
       >
-        <button class={styles.focusTabButton} onClick={() => repl.setActiveTab(props.path)}>
+        <button class={styles.focusTabButton} onClick={() => solidlab.setActiveTab(props.path)}>
           {getNameFromPath(props.path)}
         </button>
         <CodiconButton
           class={styles.closeTabButton}
           kind="close"
-          onClick={() => repl.closeTab(props.path)}
+          onClick={() => solidlab.closeTab(props.path)}
         />
       </span>
     )
@@ -266,7 +250,7 @@ function Tabs() {
   return (
     <div class={styles.tabsContainer}>
       <div class={clsx(styles.tabs, styles.bar)}>
-        <For each={repl.tabs()}>{tab => <Tab path={tab} />}</For>
+        <For each={solidlab.tabs()}>{tab => <Tab path={tab} />}</For>
       </div>
     </div>
   )
@@ -280,7 +264,7 @@ function Tabs() {
 
 function EditorPane() {
   const repl = useSolidLab()
-  const [source] = createResource(every(repl.activeTab, repl.container), ([path, container]) =>
+  const [source] = createResource(every(repl.activeTab, repl.webContainer), ([path, container]) =>
     container.fs.readFile(path, 'utf-8'),
   )
   return (
@@ -311,22 +295,22 @@ function EditorPane() {
 /**********************************************************************************/
 
 function Explorer() {
-  const repl = useSolidLab()
+  const solidlab = useSolidLab()
 
   function addNew(type: 'file' | 'directory') {
     const path =
-      repl.selectedDirectory() || repl.activeTab()?.split('/').slice(0, -1).join('/') || ''
-
-    repl.setNewContent({ type, path })
+      solidlab.selectedDirectory() || solidlab.activeTab()?.split('/').slice(0, -1).join('/') || ''
+    solidlab.setNewContent({ type, path })
   }
+
   return (
-    <Split.Pane max="50px" size="200px" class={clsx(styles.pane, styles.actionPane)}>
+    <>
       <div class={clsx(styles.explorerBar, styles.bar)}>
         <CodiconButton kind="new-file" onClick={() => addNew('file')} />
         <CodiconButton kind="new-folder" onClick={() => addNew('directory')} />
       </div>
       <Show
-        when={!repl.container.loading}
+        when={!solidlab.webContainer.loading}
         fallback={
           <div class={styles.suspenseMessage}>
             <LoaderAnimation />
@@ -337,7 +321,7 @@ function Explorer() {
           <Directory.Contents path="" layer={0} />
         </div>
       </Show>
-    </Split.Pane>
+    </>
   )
 }
 
@@ -377,8 +361,9 @@ function ExplorerInput(props: {
 }
 
 function File(props: { layer: number; path: string }) {
+  const solidlab = useSolidLab()
+
   const [name, setName] = createWritable(() => getNameFromPath(props.path))
-  const repl = useSolidLab()
   const [renaming, setRenaming] = createSignal(false)
 
   function onRename(event: { currentTarget: HTMLInputElement }) {
@@ -390,7 +375,7 @@ function File(props: { layer: number; path: string }) {
       }
       setName(name)
       const newPath = `${props.path.split('/').slice(0, -1).join('/')}/${name}`
-      repl.container()?.fs.rename(props.path, newPath)
+      solidlab.webContainer()?.fs.rename(props.path, newPath)
     })
   }
 
@@ -405,11 +390,10 @@ function File(props: { layer: number; path: string }) {
           style={{
             '--explorer-layer': props.layer,
           }}
-          class={clsx(repl.activeTab() === props.path && !repl.newContent() && styles.active)}
-          onClick={() => {
-            repl.addTab(props.path)
-            repl.setActiveTab(props.path)
-          }}
+          class={clsx(
+            solidlab.activeTab() === props.path && !solidlab.newContent() && styles.active,
+          )}
+          onClick={() => solidlab.setActiveTab(props.path)}
         >
           {name()}
         </ContextMenu.Trigger>
@@ -422,7 +406,7 @@ function File(props: { layer: number; path: string }) {
           <ContextMenu.Item
             class={styles.contextMenuItem}
             onClick={() => {
-              repl.container()?.fs.rm(props.path, { force: true })
+              solidlab.webContainer()?.fs.rm(props.path, { force: true })
             }}
           >
             <span>Delete</span>
@@ -434,13 +418,13 @@ function File(props: { layer: number; path: string }) {
 }
 
 function Directory(props: { path: string; layer: number; open?: boolean }) {
-  const repl = useSolidLab()
+  const solidlab = useSolidLab()
 
   const [name, setName] = createWritable(() => getNameFromPath(props.path))
   const [renaming, setRenaming] = createSignal(false)
   const [open, setOpen] = createSignal(props.open || false)
 
-  whenEffect(repl.newContent, ({ path }) => {
+  whenEffect(solidlab.newContent, ({ path }) => {
     if (path.includes(props.path)) {
       setOpen(true)
     }
@@ -455,7 +439,7 @@ function Directory(props: { path: string; layer: number; open?: boolean }) {
       }
       setName(name)
       const newPath = `${props.path.split('/').slice(0, -1).join('/')}/${name}`
-      repl.container()?.fs.rename(props.path, newPath)
+      solidlab.webContainer()?.fs.rename(props.path, newPath)
     })
   }
 
@@ -483,12 +467,14 @@ function Directory(props: { path: string; layer: number; open?: boolean }) {
             as="button"
             style={{ '--explorer-layer': props.layer - 1 }}
             class={clsx(
-              !open() && repl.activeTab().includes(props.path) && styles.active,
-              !repl.newContent() && repl.selectedDirectory() === props.path && styles.selected,
+              !open() && solidlab.activeTab().includes(props.path) && styles.active,
+              !solidlab.newContent() &&
+                solidlab.selectedDirectory() === props.path &&
+                styles.selected,
             )}
             onClick={() => {
               setOpen(bool => !bool)
-              repl.setSelectedDirectory(props.path)
+              solidlab.setSelectedDirectory(props.path)
             }}
           >
             <Codicon
@@ -510,7 +496,7 @@ function Directory(props: { path: string; layer: number; open?: boolean }) {
             <ContextMenu.Item
               class={styles.contextMenuItem}
               onClick={() => {
-                repl.container()?.fs.rm(props.path, { force: true, recursive: true })
+                solidlab.webContainer()?.fs.rm(props.path, { force: true, recursive: true })
               }}
             >
               <span>Delete</span>
@@ -518,13 +504,13 @@ function Directory(props: { path: string; layer: number; open?: boolean }) {
             <ContextMenu.Separator class={styles.contextMenuSeparator} />
             <ContextMenu.Item
               class={styles.contextMenuItem}
-              onClick={() => repl.setNewContent({ type: 'file', path: props.path })}
+              onClick={() => solidlab.setNewContent({ type: 'file', path: props.path })}
             >
               <span>Create File</span>
             </ContextMenu.Item>
             <ContextMenu.Item
               class={styles.contextMenuItem}
-              onClick={() => repl.setNewContent({ type: 'directory', path: props.path })}
+              onClick={() => solidlab.setNewContent({ type: 'directory', path: props.path })}
             >
               <span>Create Directory</span>
             </ContextMenu.Item>
@@ -536,9 +522,9 @@ function Directory(props: { path: string; layer: number; open?: boolean }) {
 }
 
 Directory.Contents = (props: { path: string; layer: number }) => {
-  const repl = useSolidLab()
+  const solidlab = useSolidLab()
 
-  const [contents, { refetch }] = createResource(repl.container, async container => {
+  const [contents, { refetch }] = createResource(solidlab.webContainer, async container => {
     const contents = await container.fs.readdir(props.path, { withFileTypes: true })
     const files = contents
       .filter(content => content.isFile())
@@ -554,14 +540,14 @@ Directory.Contents = (props: { path: string; layer: number }) => {
     }
   })
 
-  whenEffect(repl.container, container => container.fs.watch(props.path, refetch))
+  whenEffect(solidlab.webContainer, container => container.fs.watch(props.path, refetch))
 
   return (
     <>
       <For each={contents.latest?.directories}>
         {file => <Directory path={`${props.path}/${file}`} layer={props.layer + 1} />}
       </For>
-      <Show when={repl.newContent()?.path === props.path && repl.newContent()!} keyed>
+      <Show when={solidlab.newContent()?.path === props.path && solidlab.newContent()!} keyed>
         {({ type, path }) => (
           <Directory.NewContent
             path={path}
@@ -592,8 +578,8 @@ Directory.NewContent = (props: {
   layer: number
   prefix?: JSX.Element
 }) => {
-  const repl = useSolidLab()
-  const container = repl.container()
+  const solidlab = useSolidLab()
+  const container = solidlab.webContainer()
 
   if (!container) {
     throw `Tried to add new content before repl.container is initialised.`
@@ -605,13 +591,12 @@ Directory.NewContent = (props: {
       const newPath = `${props.path}/${value}`
       if (props.type === 'file') {
         await container!.fs.writeFile(newPath, '')
-        repl.setActiveTab(newPath)
-        repl.addTab(newPath)
+        solidlab.setActiveTab(newPath)
       } else {
         await container!.fs.mkdir(newPath)
       }
     }
-    repl.setNewContent(undefined)
+    solidlab.setNewContent(undefined)
   }
 
   return (
@@ -626,31 +611,35 @@ Directory.NewContent = (props: {
 /**********************************************************************************/
 
 function SideBar() {
-  const repl = useSolidLab()
+  const solidlab = useSolidLab()
+
   return (
-    <Split.Pane size="40px" class={styles.sideBar}>
+    <Split.Pane size="50px" class={styles.sideBar}>
       <div>
         <Dialog>
           <Dialog.Trigger as={CodiconButton} kind="three-bars" />
           <ManagerModal />
         </Dialog>
         <CodiconButton
-          class={clsx(repl.actionMode() === 'explorer' && styles.active)}
+          class={clsx(solidlab.actionMode() === 'explorer' && styles.active)}
           kind="files"
-          onClick={() => repl.setActionMode('explorer')}
+          onClick={() => solidlab.setActionMode('explorer')}
         />
         <CodiconButton
-          class={clsx(repl.actionMode() === 'search' && styles.active)}
+          class={clsx(solidlab.actionMode() === 'search' && styles.active)}
           kind="search"
-          onClick={() => repl.setActionMode('search')}
+          onClick={() => {
+            solidlab.setActionMode('search')
+            solidlab.searchInput()?.focus()
+          }}
         />
         <CodiconButton kind="fold-down" />
       </div>
       <div>
         <CodiconButton
           kind="color-mode"
-          onClick={repl.toggleColorMode}
-          class={clsx(repl.colorMode() === 'dark' && styles.colorModeButtonDark)}
+          onClick={solidlab.toggleColorMode}
+          class={clsx(solidlab.colorMode() === 'dark' && styles.colorModeButtonDark)}
         />
       </div>
     </Split.Pane>
@@ -664,13 +653,13 @@ function SideBar() {
 /**********************************************************************************/
 
 function Frame() {
-  const repl = useSolidLab()
+  const solidlab = useSolidLab()
 
   const loadingMessage = () => {
-    if (!repl.container()) return 'Booting Web Container!'
-    if (!repl.progress.packagesInstalled()) return 'Installing Node Modules!'
+    if (!solidlab.webContainer()) return 'Booting Web Container!'
+    if (!solidlab.progress.packagesInstalled()) return 'Installing Node Modules!'
 
-    if (!repl.baseUrl()) return 'Initializing Development Server!'
+    if (!solidlab.baseUrl()) return 'Initializing Development Server!'
     return undefined
   }
 
@@ -681,7 +670,7 @@ function Frame() {
         if (typeof e.data !== 'object') return
         if (e.data.type === 'url-changed') {
           const [, route] = e.data.location.split('local-corp.webcontainer-api.io')
-          repl.setRoute(route)
+          solidlab.setRoute(route)
         }
       },
       false,
@@ -694,17 +683,17 @@ function Frame() {
         <CodiconButton
           kind="debug-restart"
           onClick={() => {
-            const _baseUrl = repl.baseUrl()
-            repl.setBaseUrl(undefined)
-            requestAnimationFrame(() => repl.setBaseUrl(_baseUrl))
+            const _baseUrl = solidlab.baseUrl()
+            solidlab.setBaseUrl(undefined)
+            requestAnimationFrame(() => solidlab.setBaseUrl(_baseUrl))
           }}
         />
         <input
           spellcheck={false}
-          value={repl.route()}
+          value={solidlab.route()}
           onKeyDown={event => {
             if (event.key === 'Enter') {
-              repl.setRoute(event.currentTarget.value)
+              solidlab.setRoute(event.currentTarget.value)
             }
           }}
         />
@@ -717,7 +706,7 @@ function Frame() {
           </div>
         }
       >
-        <iframe src={repl.baseUrl() + repl.route()} class={styles.frame} />
+        <iframe src={solidlab.baseUrl() + solidlab.route()} class={styles.frame} />
       </Show>
     </Split.Pane>
   )
@@ -730,7 +719,24 @@ function Frame() {
 /**********************************************************************************/
 
 const SolidLabContext = createContext<{
-  container: Resource<WebContainer>
+  setSearch: SetStoreFunction<{
+    searchQuery: string
+    replaceQuery: string
+    isRegex: boolean
+    isCaseSensitive: boolean
+    isWholeWord: boolean
+  }>
+  search: {
+    searchQuery: string
+    replaceQuery: string
+    isRegex: boolean
+    isCaseSensitive: boolean
+    isWholeWord: boolean
+  }
+  webContainer: Resource<WebContainer>
+  terminal: TerminalInstance
+  setSearchInput: Setter<HTMLInputElement | undefined>
+  searchInput: Accessor<HTMLInputElement | undefined>
   actionMode: Accessor<'search' | 'explorer'>
   setActionMode: Setter<'search' | 'explorer'>
   selectedDirectory: Accessor<string | undefined>
@@ -739,7 +745,6 @@ const SolidLabContext = createContext<{
   newContent: Accessor<{ path: string; type: 'directory' | 'file' } | undefined>
   activeTab: () => string
   setActiveTab: (path: string) => void
-  addTab: (path: string) => void
   baseUrl: Accessor<string | undefined>
   setBaseUrl: Setter<string | undefined>
   closeTab: (path: string) => void
@@ -760,32 +765,45 @@ export function useSolidLab() {
 }
 
 export function SolidLab() {
-  const [container] = createResource(async () => {
-    const container = await WebContainer.boot()
-    await container.mount(files)
-    window.container = container
-    return container
+  const terminal = new TerminalInstance({
+    convertEol: true,
+    fontSize: 10,
+    lineHeight: 1,
   })
 
   const [tabs, setTabs] = createSignal<string[]>(['/src/app.tsx'])
   const [activeTab, setActiveTab] = createSignal<string>('/src/app.tsx')
+  const [searchInput, setSearchInput] = createSignal<HTMLInputElement>()
   const [selectedDirectory, setSelectedDirectory] = createWritable<string | undefined>(
     () => activeTab() && undefined,
   )
   const [colorMode, setColorMode] = makePersisted(createSignal<'light' | 'dark'>('light'), {
     name: 'color-mode',
   })
-
   const [route, setRoute] = createSignal('/')
   const [baseUrl, setBaseUrl] = createSignal<string>()
-
   const [newContent, setNewContent] = createSignal<
     { path: string; type: 'file' | 'directory' } | undefined
   >(undefined)
-
   const [actionMode, setActionMode] = createSignal<'explorer' | 'search'>('explorer')
+  
+  const [search, setSearch] = createStore({
+    searchQuery: '',
+    replaceQuery: '',
+    isRegex: false,
+    isCaseSensitive: false,
+    isWholeWord: false,
+  })
 
-  const [packagesInstalled] = createResource(container, async container => {
+  const [webContainer] = createResource(async () => {
+    const webContainer = await WebContainer.boot()
+    await webContainer.mount(files)
+    // TODO: remove
+    window.webContainer = webContainer
+    return webContainer
+  })
+
+  const [packagesInstalled] = createResource(webContainer, async container => {
     container.on('server-ready', (port, url) => {
       console.log('port is ', port)
       setBaseUrl(url)
@@ -805,7 +823,7 @@ export function SolidLab() {
     return true
   })
 
-  whenEffect(every(container, packagesInstalled), async ([container]) => {
+  whenEffect(every(webContainer, packagesInstalled), async ([container]) => {
     terminal.writeln('pnpm dev')
     const process = await container.spawn('pnpm', ['dev'])
     process.output.pipeTo(
@@ -824,7 +842,12 @@ export function SolidLab() {
   return (
     <SolidLabContext.Provider
       value={{
-        container,
+        search,
+        setSearch,
+        terminal,
+        webContainer,
+        setSearchInput,
+        searchInput,
         actionMode,
         setActionMode,
         selectedDirectory,
@@ -842,11 +865,11 @@ export function SolidLab() {
         toggleColorMode() {
           setColorMode(mode => (mode === 'light' ? 'dark' : 'light'))
         },
-        addTab(path) {
-          if (tabs().includes(path)) return
-          setTabs(tabs => [...tabs, path])
-        },
         setActiveTab(path) {
+          if (!tabs().includes(path)) {
+            setTabs(tabs => [...tabs, path])
+          }
+
           setActiveTab(path)
         },
         closeTab(path) {
@@ -864,10 +887,14 @@ export function SolidLab() {
     >
       <Split
         class={clsx(styles.solidlab, colorMode() === 'dark' && styles.dark)}
-        style={{ '--explorer-width': '200px', '--terminal-height': '250px' }}
+        style={{ '--terminal-height': '250px' }}
       >
         <SideBar />
-        <Explorer />
+        <Split.Pane max="100px" size="200px" class={clsx(styles.pane, styles.actionPane)}>
+          <Show when={actionMode() === 'explorer'} fallback={<SearchAndReplace />}>
+            <Explorer />
+          </Show>
+        </Split.Pane>
         <Handle />
         <EditorPane />
         <Handle />
